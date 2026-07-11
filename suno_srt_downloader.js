@@ -1,5 +1,5 @@
 /*!
- * Suno SRT Downloader v1.0.3
+ * Suno SRT Downloader v1.1.0
  * Copyright (c) 2026 cityedge
  * SPDX-License-Identifier: MIT
  *
@@ -9,13 +9,15 @@
 (async function sunoSrtDownloader() {
   'use strict';
 
-  const VERSION = '1.0.3';
+  const VERSION = '1.1.0';
   const SETTINGS = {
     startOffset: -0.1,
     endPadding: 1.5,
     maxExtension: 0.4,
     gap: 0,
-    minDuration: 0.1
+    minDuration: 0.1,
+    tokenIntervalThreshold: 3.0,
+    tokenIntervalRetain: 1.5
   };
   const JA = /^ja\b/i.test(navigator.language || '');
   const MESSAGES = JA ? {
@@ -62,12 +64,18 @@
       .trim();
   }
 
-  function cleanLeadingTags(value) {
+  function stripLeadingTags(value) {
     let text = sanitizeText(value);
+    let removed = 0;
     while (/^\s*\[[^\]\r\n]*\]\s*/.test(text)) {
       text = text.replace(/^\s*\[[^\]\r\n]*\]\s*/, '');
+      removed += 1;
     }
-    return text.trim();
+    return {
+      text: text.trim(),
+      removed,
+      tagOnly: removed > 0 && !text.trim()
+    };
   }
 
   function getRawText(line) {
@@ -119,25 +127,83 @@
     return promptCue || compressed || (sectionCue && promptMatches.length >= 1);
   }
 
+  function repairAbnormalTokenInterval(line) {
+    const repaired = { ...line };
+    const tokens = Array.isArray(line.wordTokens) ? line.wordTokens : [];
+    if (tokens.length < 2 || repaired.wordStart === null || repaired.wordEnd === null) return repaired;
+
+    let largest = null;
+    for (let index = 0; index < tokens.length - 1; index += 1) {
+      const current = tokens[index];
+      const next = tokens[index + 1];
+      const startDifference = next.start - current.start;
+      const endDifference = next.end - current.end;
+      const interval = Math.max(startDifference, endDifference);
+      if (!Number.isFinite(interval) || interval <= SETTINGS.tokenIntervalThreshold) continue;
+      if (!largest || interval > largest.interval) largest = { index, interval };
+    }
+    if (!largest) return repaired;
+
+    const shift = largest.interval - SETTINGS.tokenIntervalRetain;
+    if (shift <= 0.001) return repaired;
+    if (line.firstLyricAfterMeta) {
+      repaired.wordStart = roundMillis(clamp(
+        repaired.wordStart + shift,
+        repaired.wordStart,
+        repaired.wordEnd - 0.02
+      ));
+    } else {
+      repaired.wordEnd = roundMillis(clamp(
+        repaired.wordEnd - shift,
+        repaired.wordStart + 0.02,
+        repaired.wordEnd
+      ));
+    }
+    return repaired;
+  }
+
   function normalizeLines(payload) {
     const lines = [];
+    let firstLyricPending = false;
     extractRawLines(payload).forEach((line) => {
-      const text = cleanLeadingTags(getRawText(line));
-      if (!text) return;
-      const words = Array.isArray(line?.words) ? line.words : [];
-      const wordStarts = words.map((word) => finiteNumber(word?.start_s)).filter((value) => value !== null);
-      const wordEnds = words.map((word) => finiteNumber(word?.end_s)).filter((value) => value !== null);
+      const cleaned = stripLeadingTags(getRawText(line));
+      if (!cleaned.text) {
+        if (cleaned.tagOnly) firstLyricPending = true;
+        return;
+      }
+
       const lineStart = finiteNumber(line?.start_s);
       const lineEnd = finiteNumber(line?.end_s);
       const section = sanitizeText(line?.section || '');
-      if (isLikelyInstructionLine(text, section, lineStart, lineEnd)) return;
-      lines.push({
-        text,
+      const likelyInstruction = isLikelyInstructionLine(cleaned.text, section, lineStart, lineEnd);
+      const firstLyricAfterMeta = (firstLyricPending || cleaned.removed > 0) && !likelyInstruction;
+      if (likelyInstruction) {
+        if (firstLyricPending || cleaned.removed > 0) firstLyricPending = true;
+        return;
+      }
+      firstLyricPending = false;
+
+      const wordTokens = (Array.isArray(line?.words) ? line.words : [])
+        .map((word) => {
+          const start = finiteNumber(word?.start_s);
+          const end = finiteNumber(word?.end_s);
+          return start !== null && end !== null && end > start
+            ? { start, end }
+            : null;
+        })
+        .filter(Boolean);
+      const wordStarts = wordTokens.map((word) => word.start);
+      const wordEnds = wordTokens.map((word) => word.end);
+      const normalizedLine = {
+        text: cleaned.text,
         lineStart,
         lineEnd,
         wordStart: wordStarts.length ? Math.min(...wordStarts) : null,
-        wordEnd: wordEnds.length ? Math.max(...wordEnds) : null
-      });
+        wordEnd: wordEnds.length ? Math.max(...wordEnds) : null,
+        wordTokens,
+        firstLyricAfterMeta
+      };
+      lines.push(repairAbnormalTokenInterval(normalizedLine));
     });
     return { lines, duration: extractDuration(payload) };
   }
