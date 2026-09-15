@@ -1,5 +1,5 @@
 /*!
- * Suno SRT Downloader v1.1.0
+ * Suno SRT Downloader v1.2.0
  * Copyright (c) 2026 cityedge
  * SPDX-License-Identifier: MIT
  *
@@ -9,7 +9,7 @@
 (async function sunoSrtDownloader() {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const SETTINGS = {
     startOffset: -0.1,
     endPadding: 1.5,
@@ -19,18 +19,28 @@
     tokenIntervalThreshold: 3.0,
     tokenIntervalRetain: 1.5
   };
+  const STORAGE_KEY = 'cityedge.sunoSrtDownloader.startOffset';
+  const START_OFFSET_OPTIONS = [0, -0.1, -0.2, -0.3, -0.4, -0.5];
   const JA = /^ja\b/i.test(navigator.language || '');
   const MESSAGES = JA ? {
     wrongPage: 'Sunoの曲ページで実行してください。',
     login: 'Sunoへのログインが必要です。',
     api: 'Suno APIエラー',
     noLyrics: '出力できる歌詞行がありません。',
+    dialogTitle: 'Suno SRT Downloader',
+    startOffset: '開始補正',
+    download: 'ダウンロード',
+    close: '閉じる',
     error: 'エラー'
   } : {
     wrongPage: 'Run this on a Suno song page.',
     login: 'You must be signed in to Suno.',
     api: 'Suno API error',
     noLyrics: 'No lyric lines are available for export.',
+    dialogTitle: 'Suno SRT Downloader',
+    startOffset: 'Start offset',
+    download: 'Download',
+    close: 'Close',
     error: 'Error'
   };
 
@@ -38,6 +48,125 @@
     if (value === null || value === undefined || value === '') return null;
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
+  }
+
+  function isAllowedStartOffset(value) {
+    return START_OFFSET_OPTIONS.some((option) => Math.abs(option - value) < 0.0001);
+  }
+
+  function loadStartOffset() {
+    try {
+      const saved = finiteNumber(localStorage.getItem(STORAGE_KEY));
+      return saved !== null && isAllowedStartOffset(saved) ? saved : SETTINGS.startOffset;
+    } catch (_) {
+      return SETTINGS.startOffset;
+    }
+  }
+
+  function saveStartOffset(value) {
+    try {
+      localStorage.setItem(STORAGE_KEY, String(value));
+    } catch (_) {
+      // Storage may be unavailable; downloading should still work.
+    }
+  }
+
+  function chooseStartOffset() {
+    return new Promise((resolve) => {
+      document.getElementById('cityedge-suno-srt-dialog')?.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'cityedge-suno-srt-dialog';
+      Object.assign(overlay.style, {
+        position: 'fixed',
+        inset: '0',
+        zIndex: '2147483647',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0,0,0,.38)',
+        fontFamily: 'system-ui,-apple-system,Segoe UI,sans-serif'
+      });
+
+      const panel = document.createElement('div');
+      Object.assign(panel.style, {
+        width: 'min(340px,calc(100vw - 32px))',
+        background: '#18181b',
+        color: '#f4f4f5',
+        border: '1px solid #3f3f46',
+        borderRadius: '12px',
+        boxShadow: '0 18px 48px rgba(0,0,0,.45)',
+        padding: '18px'
+      });
+
+      const header = document.createElement('div');
+      Object.assign(header.style, { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' });
+      const title = document.createElement('div');
+      title.textContent = MESSAGES.dialogTitle;
+      Object.assign(title.style, { flex: '1', fontSize: '16px', fontWeight: '700' });
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '×';
+      close.title = MESSAGES.close;
+      Object.assign(close.style, {
+        width: '30px', height: '30px', border: '0', borderRadius: '7px',
+        background: '#27272a', color: '#d4d4d8', cursor: 'pointer', fontSize: '20px', lineHeight: '1'
+      });
+      header.append(title, close);
+
+      const label = document.createElement('label');
+      label.textContent = MESSAGES.startOffset;
+      Object.assign(label.style, { display: 'block', fontSize: '13px', color: '#d4d4d8', marginBottom: '6px' });
+      const select = document.createElement('select');
+      Object.assign(select.style, {
+        width: '100%', height: '38px', border: '1px solid #52525b', borderRadius: '8px',
+        background: '#27272a', color: '#fafafa', padding: '0 10px', fontSize: '14px', marginBottom: '14px'
+      });
+      START_OFFSET_OPTIONS.forEach((value) => {
+        const option = document.createElement('option');
+        option.value = String(value);
+        option.textContent = `${value.toFixed(1)}${JA ? '秒' : ' s'}`;
+        select.appendChild(option);
+      });
+      select.value = String(loadStartOffset());
+
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.textContent = MESSAGES.download;
+      Object.assign(download.style, {
+        width: '100%', height: '40px', border: '0', borderRadius: '8px',
+        background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '700'
+      });
+
+      panel.append(header, label, select, download);
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+
+      let finished = false;
+      const cleanup = (value) => {
+        if (finished) return;
+        finished = true;
+        document.removeEventListener('keydown', onKeyDown, true);
+        overlay.remove();
+        resolve(value);
+      };
+      const submit = () => {
+        const value = finiteNumber(select.value);
+        if (value === null || !isAllowedStartOffset(value)) return;
+        saveStartOffset(value);
+        cleanup(value);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') cleanup(null);
+        else if (event.key === 'Enter') submit();
+      };
+
+      close.addEventListener('click', () => cleanup(null));
+      download.addEventListener('click', submit);
+      overlay.addEventListener('click', (event) => { if (event.target === overlay) cleanup(null); });
+      document.addEventListener('keydown', onKeyDown, true);
+      select.focus();
+    });
   }
 
   function roundMillis(value) {
@@ -402,6 +531,10 @@
     if (!songId) return alert(MESSAGES.wrongPage);
     const token = getCookie('__session');
     if (!token) return alert(MESSAGES.login);
+
+    const selectedStartOffset = await chooseStartOffset();
+    if (selectedStartOffset === null) return;
+    SETTINGS.startOffset = selectedStartOffset;
 
     const previousCursor = document.documentElement.style.cursor;
     document.documentElement.style.cursor = 'wait';

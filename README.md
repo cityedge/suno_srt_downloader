@@ -1,8 +1,8 @@
-# Suno SRT Downloader v1.1.0
+# Suno SRT Downloader v1.2.0
 
-Sunoの曲ページでクリックすると、Sunoの同期歌詞を取得し、字幕向けの固定補正を適用して、`曲名.srt`をすぐにダウンロードするブックマークレットです。設定画面はありません。SRT Tap Timerなどで最終修正するための初期SRT作成を目的としています。
+Sunoの曲ページでクリックすると、小さなダイアログで「開始補正」だけを選択し、Sunoの同期歌詞を取得して字幕向けの補正を適用し、`曲名.srt`をダウンロードするブックマークレットです。SRT Tap Timerなどで最終修正するための初期SRT作成を目的としています。
 
-Suno SRT Downloader is a one-click bookmarklet that retrieves Suno's aligned lyrics, applies fixed subtitle-oriented timing corrections, and immediately downloads `Song title.srt`.
+Suno SRT Downloader is a bookmarklet that shows a small start-offset dialog, retrieves Suno's aligned lyrics, applies subtitle-oriented timing corrections, and downloads `Song title.srt`.
 
 ## 重要 / Important
 
@@ -10,11 +10,18 @@ Suno SRT Downloader is a one-click bookmarklet that retrieves Suno's aligned lyr
 >
 > **After a song is generated, each lyrics edit in Suno rebuilds the synchronization timing. Timing accuracy generally decreases with each rebuild. Run this tool before the lyrics have been edited even once.**
 
+## ユーザー設定
+
+| 項目 | 選択肢 | 初期値 |
+|---|---|---:|
+| 開始補正 | 0.0 / -0.1 / -0.2 / -0.3 / -0.4 / -0.5秒 | -0.1秒 |
+
+選択した開始補正はSunoページの`localStorage`へ保存され、次回起動時に復元されます。
+
 ## 固定設定
 
 | 項目 | 値 |
 |---|---:|
-| 開始補正 | -0.10秒 |
 | 終了余韻 | +1.50秒 |
 | 次行まで延長する最大時間 | 0.40秒 |
 | 字幕間ギャップ | 0.00秒 |
@@ -26,9 +33,9 @@ Suno SRT Downloader is a one-click bookmarklet that retrieves Suno's aligned lyr
 
 行内単語時刻を優先し、利用状況が悪い場合は行時刻を使用します。
 
-## v1.1.0の異常トークン間隔修復
+## 異常トークン間隔修復
 
-各歌詞行の隣接トークンについて、開始時刻差と終了時刻差の大きい方を調べます。最大値が3.0秒を超える場合、その異常間隔を1.5秒へ圧縮します。
+v1.1.0で導入した固定ロジックを変更せず継承しています。各歌詞行の隣接トークンについて、開始時刻差と終了時刻差の大きい方を調べ、最大値が3.0秒を超える場合、その異常間隔を1.5秒へ圧縮します。
 
 - メタタグ後の最初の実歌詞行：終了側を維持し、開始を後ろへ移動
 - その他の歌詞行：開始側を維持し、終了を前へ移動
@@ -41,17 +48,18 @@ Suno SRT Downloader is a one-click bookmarklet that retrieves Suno's aligned lyr
 2. `Suno → SRT`をブックマークバーへドラッグします。
 3. Sunoへログインし、歌詞を一度も編集していない対象曲の`/song/...`または`/edit/...`ページを開きます。
 4. `Suno → SRT`をクリックします。
-5. 正常時は画面を表示せず、`曲名.srt`がダウンロードされます。
+5. 小さなダイアログで開始補正を選びます。初回は`-0.1秒`です。
+6. `ダウンロード`を押すと`曲名.srt`がダウンロードされます。
 
 ## ファイル
 
 - `index.html` — インストールページ / GitHub Pages
-- `USER_GUIDE.md` — 使用方法、固定設定、注意事項
+- `USER_GUIDE.md` — 使用方法、設定、注意事項
 - `CHANGELOG.md` — 変更履歴
 - `LICENSE` — cityedgeによる本プロジェクトのMITライセンス
 - `THIRD_PARTY_NOTICES.md` — 派生元の著作権表示とMITライセンス全文
 - `suno_srt_downloader.js` — 非圧縮ソース
-- `suno_srt_downloader.compact.js` — 1行圧縮ソース
+- `suno_srt_downloader.compact.js` — ブックマークレット用1行ソース
 - `bookmarklet.txt` — URLエンコード済みブックマークレットURL
 
 ## 推奨環境

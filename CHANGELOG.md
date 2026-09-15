@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0 — 2026-09-16
+
+- Added a small download dialog to the public bookmarklet.
+- Made only the start offset user-selectable: 0.0 to -0.5 seconds in 0.1-second steps.
+- Keeps -0.1 seconds as the default.
+- Saves the selected start offset in Suno-origin `localStorage` and restores it on the next run.
+- All other timing parameters and the v1.1.0 abnormal token-interval repair remain fixed and unchanged.
+
 ## v1.1.0 — 2026-07-11
 
 - Added the fixed abnormal token-interval repair validated in Suno SRT Timing Adjuster v0.5.0.
